@@ -54,11 +54,12 @@ class App():
         dir = "C:\\Users\Y.Kojima\Desktop\test\test.jpg"
         img_format = [".png", ".jpg", ".jpeg", ".bmp"]
         tar_dir = os.path.dirname(os.path.abspath(sg.popup_get_file('画像読込')))
+
         if tar_dir is None:
             return
         img_list = [p for p in glob.glob("{0}\\**".format(tar_dir),
                                         recursive=True) if os.path.splitext(p)[1] in img_format]
- 
+        
         #for i in range(len(img_list)):
         #    self.label_dict['data'].append({"fileName":os.path.basename(img_list[i]),
         #                            "set":"",
@@ -131,10 +132,12 @@ class App():
                 time_sta = time.perf_counter()
  
                 ##描画プロセス
-                label_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
-                self.label_img = self.scale_box(label_img, self.img_window[0], self.img_window[1])
- 
+                self.label_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
+
                 self.label_update(self.label_data)
+                self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
+
+
                 self.dst = cv2.addWeighted(self.img, 1, self.label_img, 0.3, 0)
  
                 cv2.imshow('ImageWindow', self.dst)
