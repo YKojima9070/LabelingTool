@@ -51,7 +51,6 @@ class App():
 #                             size=(60, 10), orientation='h', key='-slider-')],
  
         ##参照フォルダ指定
-        dir = "C:\\Users\Y.Kojima\Desktop\test\test.jpg"
         img_format = [".png", ".jpg", ".jpeg", ".bmp"]
         tar_dir = os.path.dirname(os.path.abspath(sg.popup_get_file('画像読込')))
 
@@ -59,13 +58,7 @@ class App():
             return
         img_list = [p for p in glob.glob("{0}\\**".format(tar_dir),
                                         recursive=True) if os.path.splitext(p)[1] in img_format]
-        
-        #for i in range(len(img_list)):
-        #    self.label_dict['data'].append({"fileName":os.path.basename(img_list[i]),
-        #                            "set":"",
-        #                            "classLabel":"",
-        #                            "regionLabel":[]})
- 
+         
         [self.label_dict['data'].append({"fileName":os.path.basename(img_list[i]),
                                          "set":"",
                                          "classLabel":"",
@@ -129,14 +122,11 @@ class App():
  
             while self.img_loop_trg:
  
-                time_sta = time.perf_counter()
- 
                 ##描画プロセス
                 self.label_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
 
                 self.label_update(self.label_data)
                 self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
-
 
                 self.dst = cv2.addWeighted(self.img, 1, self.label_img, 0.3, 0)
  
@@ -159,11 +149,12 @@ class App():
                     break
             break
  
+##画像スケール管理
     def scale_box(self, img, width, height):
         self.img_scale = max(width / img.shape[1], height / img.shape[0])
         return cv2.resize(img, dsize=None, fx=self.img_scale, fy=self.img_scale)
  
-##
+##ラベル更新、描画メソッド
     def label_update(self, label_data):
  
         for i in range(len(label_data)):
@@ -180,80 +171,40 @@ class App():
  
             elif label['type'] == "Rect":
                 cv2.rectangle(self.label_img, (label['x'],label['y']),
-                             (label['width'],label['height']), (255, 255, 255), thickness=-1)
+                             (label['width'],label['height']), (255, 255, 255), -1)
  
             elif label['type'] == "PolyGon":
                 pts = np.array(label["points"], dtype=np.int32)
                 cv2.fillConvexPoly(self.label_img, pts,(255, 255, 255))
  
+
 ##描画モード管理
     def draw_label(self, event, x, y, flags, param):
         x = (1 / self.img_scale) * x
         y = (1 / self.img_scale) * y
  
-        if self.draw_mode == "Rectangle":
-            self.draw_rectangle(event, x, y, flags, param)
-        
+        if self.draw_mode == "PolyLine":
+            self.draw_polyline(event, x, y, flags, param)
+
         elif self.draw_mode == "Ellipse":
             self.draw_ellipse(event, x, y, flags, param)
- 
-        elif self.draw_mode == "PolyLine":
-            self.draw_polyline(event, x, y, flags, param)
+
+        elif self.draw_mode == "Rectangle":
+            self.draw_rectangle(event, x, y, flags, param)
  
         elif self.draw_mode == "Polygon":
             self.draw_polygon(event, x, y, flags, param)
-        
+
+        if event == cv2.EVENT_RBUTTONDOWN:
+            if self.drawing_flag == False:
+                del self.label_data[-1]
+
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.drawing_flag = False
+         
  
 ##個別描画処理
- 
-    def draw_rectangle(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self.drawing_flag = True
-            self.ix, self.iy = x, y
-            self.label_data.append({"className":"class0",
-                                    "type":"Rect",
-                                    "x":self.ix,
-                                    "y":self.iy,
-                                    "width":x,
-                                    "height":y})
- 
-        elif event == cv2.EVENT_MOUSEMOVE:
-            if self.drawing_flag == True:
-                self.label_data[-1]["width"] = x
-                self.label_data[-1]["height"] = y
- 
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing_flag = False
- 
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            if self.drawing_flag == False:
-                del self.label_data[-1]
- 
- 
-    def draw_ellipse(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            self.drawing_flag = True
-            self.ix, self.iy = x, y
-            self.label_data.append({"className":"class0",
-                                    "type":"Ellipse",
-                                    "x":self.ix,
-                                    "y":self.iy,
-                                    "radiusX":0,
-                                    "radiusY":0})
-             
-        elif event == cv2.EVENT_MOUSEMOVE:
-            if self.drawing_flag == True:
-                self.label_data[-1]["radiusX"] = abs(x - self.ix)
-                self.label_data[-1]["radiusY"] = abs(y - self.iy)
- 
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing_flag = False
- 
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            if self.drawing_flag == False:
-                del self.label_data[-1]
- 
- 
+    ##Polylineマウスイベント
     def draw_polyline(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
  
@@ -270,14 +221,41 @@ class App():
                 self.pts.append([x, y])
                 self.label_data[-1]["points"] = self.pts
  
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing_flag = False
+    ##Ellipseマウスイベント 
+    def draw_ellipse(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawing_flag = True
+            self.ix, self.iy = x, y
+            self.label_data.append({"className":"class0",
+                                    "type":"Ellipse",
+                                    "x":self.ix,
+                                    "y":self.iy,
+                                    "radiusX":0,
+                                    "radiusY":0})
+             
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.drawing_flag == True:
+                self.label_data[-1]["radiusX"] = abs(x - self.ix)
+                self.label_data[-1]["radiusY"] = abs(y - self.iy)
+
+    ##Rectangleマウスイベント                 
+    def draw_rectangle(self, event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            self.drawing_flag = True
+            self.ix, self.iy = x, y
+            self.label_data.append({"className":"class0",
+                                    "type":"Rect",
+                                    "x":self.ix,
+                                    "y":self.iy,
+                                    "width":x,
+                                    "height":y})
  
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            if self.drawing_flag == False:
-                del self.label_data[-1]
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.drawing_flag == True:
+                self.label_data[-1]["width"] = x
+                self.label_data[-1]["height"] = y            
  
- 
+    ##Polygonマウスイベント                  
     def draw_polygon(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
  
@@ -292,14 +270,7 @@ class App():
             if self.drawing_flag == True:
                 self.pts.append([x, y])
                 self.label_data[-1]["points"] = self.pts
- 
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing_flag = False
- 
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            if self.drawing_flag == False:
-                del self.label_data[-1]
- 
+  
  
 App()
  
