@@ -27,7 +27,7 @@ function global:deactivate ([switch]$NonDestructive) {
 
 deactivate -nondestructive
 
-$env:VIRTUAL_ENV="C:\Users\Y.Kojima\source\repos\YKojima9070\LabelingTool\LabelingTool\LabelingTool\py36env"
+$env:VIRTUAL_ENV="C:\Users\Y.Kojima\Source\Repos\YKojima9070\LabelingTool\LabelingTool\LabelingTool\py36env"
 
 if (! $env:VIRTUAL_ENV_DISABLE_PROMPT) {
     # Set the prompt to include the env name

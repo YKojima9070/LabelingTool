@@ -161,13 +161,19 @@ class App():
             self.num_img = i
  
             label = label_data[self.num_img]
+
             if label['type'] == "PolyLine":
                 pts = np.array(label["points"], dtype=np.int32)
                 cv2.polylines(self.label_img, [pts], False,  (255, 255, 255), thickness=label["strokeWidth"])
                 
             elif label['type'] == "Ellipse":
                 cv2.ellipse(self.label_img, (label['x'],label['y']),
-                            (label["radiusX"],label["radiusY"]),0,0,360,(255,255,255),-1)
+                            (label["radiusX"],label["radiusY"]),
+                            angle = 0,
+                            startAngle = 0,
+                            endAngle = 360,
+                            color = (255,255,255),
+                            thickness = -1)
  
             elif label['type'] == "Rect":
                 cv2.rectangle(self.label_img, (label['x'],label['y']),
@@ -180,8 +186,8 @@ class App():
 
 ##描画モード管理
     def draw_label(self, event, x, y, flags, param):
-        x = (1 / self.img_scale) * x
-        y = (1 / self.img_scale) * y
+        x = int((1 / self.img_scale) * x)
+        y = int((1 / self.img_scale) * y)
  
         if self.draw_mode == "PolyLine":
             self.draw_polyline(event, x, y, flags, param)

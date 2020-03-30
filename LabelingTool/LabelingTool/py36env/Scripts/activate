@@ -37,7 +37,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\Y.Kojima\source\repos\YKojima9070\LabelingTool\LabelingTool\LabelingTool\py36env"
+VIRTUAL_ENV="C:\Users\Y.Kojima\Source\Repos\YKojima9070\LabelingTool\LabelingTool\LabelingTool\py36env"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
