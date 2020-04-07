@@ -119,11 +119,14 @@ class App():
                     self.label_data = self.label_dict['data'][num_data]['regionLabel']
  
             cv2.setMouseCallback('ImageWindow', self.draw_label)
+            
+            blank_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
+
  
             while self.img_loop_trg:
  
                 ##描画プロセス
-                self.label_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
+                self.label_img = blank_img.copy()
 
                 self.label_update(self.label_data)
                 self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
