@@ -23,6 +23,8 @@ class App():
         self.dst = []
         self.draw_mode = ''
         self.class_num = ''
+        self.class_color = 'white'
+        self.make_class = 5
         self.stroke_width = 10
         self.img_loop_trg = True
         self.img_scale = 0
@@ -32,30 +34,14 @@ class App():
                            "data":[]}
  
         sg.theme('SystemDefault')
- 
-        ##以下メインプロセス
-        layout = [
-            [sg.Text('Label Tool', size=(15, 1), font='Helvetica 15')],
-            [sg.Button('PolyLine', size=(20, 1), font='Helvetica 14', key='PolyLine')],
-            [sg.Button('Ellipse', size=(20, 1), font='Helvetica 14', key='Ellipse')],
-            [sg.Button('Rectangle', size=(20, 1), font='Helvetica 14', key='Rectangle')],
-            [sg.Button('Polygon', size=(20, 1), font='Helvetica 14', key='Polygon')],
-            [sg.Text('StrokeWidth', size=(15, 1), font='Helvetica 10', key='StrokeWidth')],
-            [sg.In(self.stroke_width, size=(15,1), font='Helvetica 10', key='strokewidth')],
- 
-            [sg.Button('SaveLabel', size=(20, 1), font='Helvetica 15')],            
-            [sg.Button('Exit', size=(20, 1), font='Helvetica 15')]
-            ]
- 
-#                  [sg.Slider(range=(0, num_frames),
-#                             size=(60, 10), orientation='h', key='-slider-')],
- 
+
         ##参照フォルダ指定
         img_format = [".png", ".jpg", ".jpeg", ".bmp"]
         tar_dir = os.path.dirname(os.path.abspath(sg.popup_get_file('画像読込')))
 
         if tar_dir is None:
             return
+        
         img_list = [p for p in glob.glob("{0}\\**".format(tar_dir),
                                         recursive=True) if os.path.splitext(p)[1] in img_format]
          
@@ -64,8 +50,36 @@ class App():
                                          "classLabel":"",
                                          "regionLabel":[]}) 
          for i in range(len(img_list))]
+
+
+        ##GUIレイアウト
+        class_layout = [
+            [sg.Radio('', 'class_num', pad=(0,0), key='class_num{}'.format(str(i))),
+             sg.In('class{}'.format(str(i)),size=(15,5),pad=(0,0), key='class_name{}'.format(str(i))),
+             sg.ColorChooserButton('', size=(5, 1),
+                                   key='class{}_color'.format(str(i)),
+                                   button_color=(self.class_color,self.class_color))] for i in range(self.make_class)]
+
+        layout = [
+            [sg.Text('Label Tool', size=(15, 1), font='Helvetica 15')],
+            [sg.Text('StrokeWidth', size=(15, 1), font='Helvetica 10', key='StrokeWidth')],
+            [sg.In(self.stroke_width, size=(15,1), font='Helvetica 10', key='strokewidth')],
+
+            [sg.Button('PolyLine', size=(20, 1), font='Helvetica 14', key='PolyLine11')],
+            [sg.Button('Ellipse', size=(20, 1), font='Helvetica 14', key='Ellipse')],
+            [sg.Button('Rectangle', size=(20, 1), font='Helvetica 14', key='Rectangle')],
+            [sg.Button('Polygon', size=(20, 1), font='Helvetica 14', key='Polygon')],
+            [sg.Text('Class Index', size=(15, 1), font='Helvetica 15')],
+            [sg.Column(class_layout)], 
+
+            [sg.Button('SaveLabel', size=(20, 1), font='Helvetica 15')],            
+            [sg.Button('Exit', size=(20, 1), font='Helvetica 15')],
+            ]
  
-        window = sg.Window('Demo Application - Labelling Tool',layout, size=(200, 700), location=(1200,50))
+#                  [sg.Slider(range=(0, num_frames),
+#                             size=(60, 10), orientation='h', key='-slider-')],
+
+        window = sg.Window('Demo Application - Labelling Tool',layout, size=(200,1000), location=(1200,50))
                     #        no_titlebar = False,
                     #        loation=(0,0))
  
@@ -76,9 +90,16 @@ class App():
         while True:
  
             event, values = window.read(timeout=100)
+
             if event == sg.TIMEOUT_KEY:
                 self.stroke_width = int(values['strokewidth'])
-               
+                for i in range(self.make_class):
+                    try:
+                        window.FindElement('class{}_color'.format(str(i))).Update(
+                            button_color=(values['class{}_color'.format(str(i))],values['class{}_color'.format(str(i))]))              
+                    except:
+                        break
+
             if event == 'PolyLine':
                 self.draw_mode = 'PolyLine'
  
