@@ -21,8 +21,9 @@ class App():
         self.label_data = []
         self.pts = []
         self.dst = []
+        self.class_color_dict = {}
         self.draw_mode = ''
-        self.class_num = ''
+        self.cur_class = ''
         self.class_color = 'white'
         self.make_class = 5
         self.stroke_width = 10
@@ -54,7 +55,7 @@ class App():
 
         ##GUIレイアウト
         class_layout = [
-            [sg.Radio('', 'class_num', pad=(0,0), key='class_num{}'.format(str(i))),
+            [sg.Radio('', 'class', pad=(0,0), key='class{}'.format(str(i)), default = True),
              sg.In('class{}'.format(str(i)),size=(15,5),pad=(0,0), key='class_name{}'.format(str(i))),
              sg.ColorChooserButton('', size=(5, 1),
                                    key='class{}_color'.format(str(i)),
@@ -65,14 +66,14 @@ class App():
             [sg.Text('StrokeWidth', size=(15, 1), font='Helvetica 10', key='StrokeWidth')],
             [sg.In(self.stroke_width, size=(15,1), font='Helvetica 10', key='strokewidth')],
 
-            [sg.Button('PolyLine', size=(20, 1), font='Helvetica 14', key='PolyLine11')],
+            [sg.Button('PolyLine', size=(20, 1), font='Helvetica 14', key='PolyLine')],
             [sg.Button('Ellipse', size=(20, 1), font='Helvetica 14', key='Ellipse')],
             [sg.Button('Rectangle', size=(20, 1), font='Helvetica 14', key='Rectangle')],
             [sg.Button('Polygon', size=(20, 1), font='Helvetica 14', key='Polygon')],
             [sg.Text('Class Index', size=(15, 1), font='Helvetica 15')],
             [sg.Column(class_layout)], 
 
-            [sg.Button('SaveLabel', size=(20, 1), font='Helvetica 15')],            
+            [sg.Button('SaveLabel', size=(20, 1), font='Helvetica 15', pad=(4,(100,0)))],            
             [sg.Button('Exit', size=(20, 1), font='Helvetica 15')],
             ]
  
@@ -93,12 +94,20 @@ class App():
 
             if event == sg.TIMEOUT_KEY:
                 self.stroke_width = int(values['strokewidth'])
+                print(self.class_color_dict)
                 for i in range(self.make_class):
-                    try:
-                        window.FindElement('class{}_color'.format(str(i))).Update(
-                            button_color=(values['class{}_color'.format(str(i))],values['class{}_color'.format(str(i))]))              
-                    except:
-                        break
+                    
+                    _color = 'class{}_color'.format(str(i))
+                    window.FindElement(_color).Update(_color, button_color=(values[_color],values[_color]))
+                    if values[_color]:
+                        self.class_color_dict['class{}'.format(str(i))] = values[_color]
+                    else:
+                        self.class_color_dict['class{}'.format(str(i))] = '#FFFFFF'
+
+
+                    if values['class{}'.format(str(i))]:
+                        self.cur_class = 'class{}'.format(str(i))
+
 
             if event == 'PolyLine':
                 self.draw_mode = 'PolyLine'
@@ -182,13 +191,19 @@ class App():
     def label_update(self, label_data):
  
         for i in range(len(label_data)):
+
             self.num_img = i
  
             label = label_data[self.num_img]
 
+            value = self.class_color_dict[label["className"]].lstrip('#')
+            lv = len(value)
+            color =  [int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3)]
+            color.reverse()
+
             if label['type'] == "PolyLine":
                 pts = np.array(label["points"], dtype=np.int32)
-                cv2.polylines(self.label_img, [pts], False,  (255, 255, 255), thickness=label["strokeWidth"])
+                cv2.polylines(self.label_img, [pts], False,  color, thickness=label["strokeWidth"])
                 
             elif label['type'] == "Ellipse":
                 cv2.ellipse(self.label_img, (label['x'],label['y']),
@@ -196,23 +211,23 @@ class App():
                             angle = 0,
                             startAngle = 0,
                             endAngle = 360,
-                            color = (255,255,255),
+                            color = color,
                             thickness = -1)
  
             elif label['type'] == "Rect":
                 cv2.rectangle(self.label_img, (label['x'],label['y']),
-                             (label['width'],label['height']), (255, 255, 255), -1)
+                             (label['width'],label['height']), color, -1)
  
             elif label['type'] == "PolyGon":
                 pts = np.array(label["points"], dtype=np.int32)
-                cv2.fillConvexPoly(self.label_img, pts,(255, 255, 255))
+                cv2.fillConvexPoly(self.label_img, pts, color)
  
 
 ##描画モード管理
     def draw_label(self, event, x, y, flags, param):
         x = int((1 / self.img_scale) * x)
         y = int((1 / self.img_scale) * y)
- 
+        
         if self.draw_mode == "PolyLine":
             self.draw_polyline(event, x, y, flags, param)
 
@@ -241,7 +256,7 @@ class App():
             self.drawing_flag = True
             self.pts = []
             self.pts.append([x, y])
-            self.label_data.append({"className":"class0",
+            self.label_data.append({"className":self.cur_class,
                                     "type":"PolyLine",
                                     "strokeWidth":self.stroke_width,
                                     "points":[self.pts]})
@@ -256,7 +271,7 @@ class App():
         if event == cv2.EVENT_LBUTTONDOWN:
             self.drawing_flag = True
             self.ix, self.iy = x, y
-            self.label_data.append({"className":"class0",
+            self.label_data.append({"className":self.cur_class,
                                     "type":"Ellipse",
                                     "x":self.ix,
                                     "y":self.iy,
@@ -273,7 +288,7 @@ class App():
         if event == cv2.EVENT_LBUTTONDOWN:
             self.drawing_flag = True
             self.ix, self.iy = x, y
-            self.label_data.append({"className":"class0",
+            self.label_data.append({"className":self.cur_class,
                                     "type":"Rect",
                                     "x":self.ix,
                                     "y":self.iy,
@@ -292,7 +307,7 @@ class App():
             self.drawing_flag = True
             self.pts = []
             self.pts.append([x, y])
-            self.label_data.append({"className":"class0",
+            self.label_data.append({"className":self.cur_class,
                                     "type":"PolyGon",
                                     "points":[self.pts]})
  
