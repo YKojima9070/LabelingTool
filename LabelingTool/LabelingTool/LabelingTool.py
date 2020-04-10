@@ -16,21 +16,23 @@ class App():
     def __init__(self):
         self.drawing_flag = False
         self.ix, self.iy = -1, -1
-        self.img = []
         self.label_img = []
         self.label_data = []
         self.pts = []
-        self.dst = []
         self.class_color_dict = {}
         self.draw_mode = ''
         self.cur_class = ''
+        self.cur_img = []
         self.class_color = 'white'
         self.make_class = 5
         self.stroke_width = 10
+        self.trans = 50
         self.img_loop_trg = True
+        self.label_loop_trg = True
         self.img_scale = 0
         self.img_window = [640, 480]
  
+
         self.label_dict = {"name":"TEST","time":"2020-03-25T09:37:28.746Z","version":"1.1.3",
                            "data":[]}
  
@@ -61,30 +63,32 @@ class App():
                                    key='class{}_color'.format(str(i)),
                                    button_color=(self.class_color,self.class_color))] for i in range(self.make_class)]
 
+
         layout = [
-            [sg.Text('Label Tool', size=(15, 1), font='Helvetica 15')],
-            [sg.Text('StrokeWidth', size=(15, 1), font='Helvetica 10', key='StrokeWidth')],
-            [sg.In(self.stroke_width, size=(15,1), font='Helvetica 10', key='strokewidth')],
+            [sg.Text('Label Tool', size=(15, 1), font='Helvetica 14')],
+            [sg.Text('StrokeWidth', size=(15, 1), font='Helvetica 14', key='StrokeWidth')],
+            [sg.Slider(range=(0,300), default_value=30, resolution=1, size=(20, 20), orientation='horizontal', key='strokewidth')],
 
             [sg.Button('PolyLine', size=(20, 1), font='Helvetica 14', key='PolyLine')],
             [sg.Button('Ellipse', size=(20, 1), font='Helvetica 14', key='Ellipse')],
             [sg.Button('Rectangle', size=(20, 1), font='Helvetica 14', key='Rectangle')],
             [sg.Button('Polygon', size=(20, 1), font='Helvetica 14', key='Polygon')],
-            [sg.Text('Class Index', size=(15, 1), font='Helvetica 15')],
+            [sg.Text('Class Index', size=(15, 1), font='Helvetica 14')],
             [sg.Column(class_layout)], 
 
-            [sg.Button('SaveLabel', size=(20, 1), font='Helvetica 15', pad=(4,(100,0)))],            
-            [sg.Button('Exit', size=(20, 1), font='Helvetica 15')],
+            [sg.Text('Transparency', size=(15, 1), font='Helvetica 14')],
+            [sg.Slider(range=(0, 100), default_value=50, resolution=1,size=(20, 20), orientation='horizontal', key='Trans')],
+
+            [sg.Text('ImageList', size=(15, 1), font='Helvetica 14')],
+            [sg.Listbox(values=img_list, size=(20, 20), key='imagelist')],
+
+
+            [sg.Button('SaveLabel', size=(20, 1), font='Helvetica 14', pad=(4,(0,0)))],            
+            [sg.Button('Exit', size=(20, 1), font='Helvetica 14')],
             ]
  
-#                  [sg.Slider(range=(0, num_frames),
-#                             size=(60, 10), orientation='h', key='-slider-')],
 
         window = sg.Window('Demo Application - Labelling Tool',layout, size=(200,1000), location=(1200,50))
-                    #        no_titlebar = False,
-                    #        loation=(0,0))
- 
-        #slider_elem = window['-slider-']
  
         threading.Thread(target=self.img_cap, args=[img_list]).start()
  
@@ -94,20 +98,24 @@ class App():
 
             if event == sg.TIMEOUT_KEY:
                 self.stroke_width = int(values['strokewidth'])
-                print(self.class_color_dict)
+                self.trans = int(values['Trans'])
+
                 for i in range(self.make_class):
                     
                     _color = 'class{}_color'.format(str(i))
-                    window.FindElement(_color).Update(_color, button_color=(values[_color],values[_color]))
+
+                    try:
+                        window.FindElement(_color).Update(_color, button_color=(values[_color],values[_color]))
+                    except:
+                        None
+
                     if values[_color]:
                         self.class_color_dict['class{}'.format(str(i))] = values[_color]
                     else:
                         self.class_color_dict['class{}'.format(str(i))] = '#FFFFFF'
 
-
                     if values['class{}'.format(str(i))]:
                         self.cur_class = 'class{}'.format(str(i))
-
 
             if event == 'PolyLine':
                 self.draw_mode = 'PolyLine'
@@ -132,16 +140,23 @@ class App():
                 break
             
         window.close()            
- 
+
+
+###以下モジュール###
+# 
     def img_cap(self, img_list):
         i = 0
  
-        cv2.namedWindow(winname='ImageWindow')
+        cv2.namedWindow('ImageWindow',cv2.WINDOW_NORMAL)
  
         while self.img_loop_trg:
             self.label_data = []
-            img = cv2.imread(img_list[i])
-            self.img = self.scale_box(img, self.img_window[0], self.img_window[1])
+
+            img_array = np.fromfile(img_list[i], dtype=np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            
+            img = self.scale_box(img, self.img_window[0], self.img_window[1])
+            
             get_img_size = img.shape
  
             for num_data in range(len(self.label_dict['data'])):
@@ -153,34 +168,33 @@ class App():
             blank_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
 
  
-            while self.img_loop_trg:
- 
+            while self.label_loop_trg: 
                 ##描画プロセス
                 self.label_img = blank_img.copy()
 
                 self.label_update(self.label_data)
                 self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
 
-                self.dst = cv2.addWeighted(self.img, 1, self.label_img, 0.3, 0)
+                dst_img = cv2.addWeighted(img, 1, self.label_img, self.trans / 100, 0)
  
-                cv2.imshow('ImageWindow', self.dst)
+                cv2.imshow('ImageWindow', dst_img)
             
                 k = cv2.waitKey(1) & 0xFF
  
                 if k == ord('r'):
-                    if i == len(img_list):
+                    i += 1
+                    if i > len(img_list)-1:
                         i = 0
-                    else:
-                        i += 1
+                    
                     break
  
                 elif k == ord('b'):
-                    if i == -len(img_list):
+                    i -= 1
+                    if i < -len(img_list)+1:
                         i = 0
-                    else:
-                        i -= 1                   
+
                     break
-            break
+
  
 ##画像スケール管理
     def scale_box(self, img, width, height):
