@@ -30,7 +30,7 @@ class App():
         self.img_loop_trg = True
         self.label_loop_trg = True
         self.img_scale = 0
-        self.img_window = [640, 480]
+        self.img_window = [1280, 960]
 
         ###0413追加
         self.shift = 1
@@ -118,6 +118,7 @@ class App():
 
                     if values[_color]:
                         self.class_color_dict['class{}'.format(str(i))] = values[_color]
+
                     else:
                         self.class_color_dict['class{}'.format(str(i))] = '#FFFFFF'
 
@@ -154,11 +155,14 @@ class App():
     def img_cap(self, img_list):
         i = 0
  
-        cv2.namedWindow('ImageWindow',cv2.WINDOW_NORMAL)
+        #cv2.namedWindow('ImageWindow',cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
+        #cv2.namedWindow('ImageWindow',cv2.WINDOW_NORMAL)
+
+        cv2.namedWindow('ImageWindow')
  
         while self.img_loop_trg:
             self.label_data = []
-
+            S
             img_array = np.fromfile(img_list[i], dtype=np.uint8)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
             img = self.scale_box(img, self.img_window[0], self.img_window[1])
@@ -176,46 +180,24 @@ class App():
 
             ###描画プロセス###
             while self.label_loop_trg: 
+                #sta_time = time.perf_counter()
 
                 self.label_img = blank_img.copy()
 
                 self.label_update(self.label_data)
-                self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
+
+                #self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
 
                 dst_img = cv2.addWeighted(img, 1, self.label_img, self.trans / 100, 0)
                 
-                ####0403追加####
-
-                ###画面シフト処理###
-                h, w = dst_img.shape[:2]
-
-                src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
-                dest = src.copy()
-
-                dest[:,0] += (self.cur_sx + self.delta_sx) * 1
-                dest[:,1] += (self.cur_sy + self.delta_sy) * 1
-                affine = cv2.getAffineTransform(src, dest)                
-                dst_img = cv2.warpAffine(dst_img, affine, (w, h))
-
+                dst_img = self.affine_img(dst_img)
                 
-                ###ズーム処理###
+                #end_time = time.perf_counter()
 
-                src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
-                dest = src.copy()
-                dest[:,0] += -320 # シフトするピクセル値
-                dest[:,1] += -240
-                dest = dest * self.shift
+                #print(end_time-sta_time)
 
-                #dest = dest * self.shift
-                dest[:,0] += 320 # シフトするピクセル値
-                dest[:,1] += 240
-                affine = cv2.getAffineTransform(src, dest)                
-                dst_img = cv2.warpAffine(dst_img, affine, (w, h))
-                
+
                 cv2.imshow('ImageWindow', dst_img)
-
-
-                #cv2.imshow('ImageWindow', dst_img)
             
                 k = cv2.waitKey(1) & 0xFF
  
@@ -242,7 +224,7 @@ class App():
  
     ##ラベル更新、描画メソッド
     def label_update(self, label_data):
- 
+
         for i in range(len(label_data)):
 
             self.num_img = i
@@ -250,6 +232,7 @@ class App():
             label = label_data[self.num_img]
 
             value = self.class_color_dict[label["className"]].lstrip('#')
+
             lv = len(value)
             color =  [int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3)]
             color.reverse()
@@ -274,11 +257,38 @@ class App():
             elif label['type'] == "PolyGon":
                 pts = np.array(label["points"], dtype=np.int32)
                 cv2.fillConvexPoly(self.label_img, pts, color)
+
+    def affine_img(self, img):
+        
+        ###シフト処理###
+        src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
+        dest = src.copy()
+
+        dest[:,0] += (self.cur_sx + self.delta_sx) * 1
+        dest[:,1] += (self.cur_sy + self.delta_sy) * 1
+        affine = cv2.getAffineTransform(src, dest)                
+        dst_img = cv2.warpAffine(img, affine, (self.img_window[0], self.img_window[1]))
+
+        ###ズーム処理###
+        src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
+        dest = src.copy()
+
+        dest[:,0] += - (self.img_window[0] / 2)
+        dest[:,1] += - (self.img_window[1] / 2)
+
+        dest = dest * self.shift
+
+        dest[:,0] += self.img_window[0] / 2
+        dest[:,1] += self.img_window[1] / 2
+
+        affine = cv2.getAffineTransform(src, dest)                
+        dst_img = cv2.warpAffine(dst_img, affine, (self.img_window[0], self.img_window[1]))
  
+        return dst_img
+
 
 ##マウスイベント管理
     def mouse_event(self, event, x, y, flags, param):
-        #print(self.img_scale)
         #x = int((1 / self.img_scale) * x)
         #y = int((1 / self.img_scale) * y)
 
@@ -401,9 +411,6 @@ class App():
                 self.pts.append([x, y])
                 self.label_data[-1]["points"] = self.pts
   
-
-
-
 
 App()
  
