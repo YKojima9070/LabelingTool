@@ -31,7 +31,14 @@ class App():
         self.label_loop_trg = True
         self.img_scale = 0
         self.img_window = [640, 480]
- 
+
+        ###0413追加
+        self.shift = 1
+        self.delta_sx, self.delta_sy = -1, -1
+        self.org_sx, self.org_sy = -1, -1
+        self.cur_sx, self.cur_sy = -1, -1
+        self.moving_flag = False
+        self.dst_img = []
 
         self.label_dict = {"name":"TEST","time":"2020-03-25T09:37:28.746Z","version":"1.1.3",
                            "data":[]}
@@ -142,8 +149,8 @@ class App():
         window.close()            
 
 
-###以下モジュール###
-# 
+###以下モジュール#### 
+    ###メイン描画プロセス###
     def img_cap(self, img_list):
         i = 0
  
@@ -153,8 +160,7 @@ class App():
             self.label_data = []
 
             img_array = np.fromfile(img_list[i], dtype=np.uint8)
-            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-            
+            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
             img = self.scale_box(img, self.img_window[0], self.img_window[1])
             
             get_img_size = img.shape
@@ -163,21 +169,53 @@ class App():
                 if self.label_dict['data'][num_data]['fileName'] == os.path.basename(img_list[i]):
                     self.label_data = self.label_dict['data'][num_data]['regionLabel']
  
-            cv2.setMouseCallback('ImageWindow', self.draw_label)
+            cv2.setMouseCallback('ImageWindow', self.mouse_event)
             
             blank_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
 
- 
+
+            ###描画プロセス###
             while self.label_loop_trg: 
-                ##描画プロセス
+
                 self.label_img = blank_img.copy()
 
                 self.label_update(self.label_data)
                 self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
 
                 dst_img = cv2.addWeighted(img, 1, self.label_img, self.trans / 100, 0)
- 
+                
+                ####0403追加####
+
+                ###画面シフト処理###
+                h, w = dst_img.shape[:2]
+
+                src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
+                dest = src.copy()
+
+                dest[:,0] += (self.cur_sx + self.delta_sx) * 1
+                dest[:,1] += (self.cur_sy + self.delta_sy) * 1
+                affine = cv2.getAffineTransform(src, dest)                
+                dst_img = cv2.warpAffine(dst_img, affine, (w, h))
+
+                
+                ###ズーム処理###
+
+                src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
+                dest = src.copy()
+                dest[:,0] += -320 # シフトするピクセル値
+                dest[:,1] += -240
+                dest = dest * self.shift
+
+                #dest = dest * self.shift
+                dest[:,0] += 320 # シフトするピクセル値
+                dest[:,1] += 240
+                affine = cv2.getAffineTransform(src, dest)                
+                dst_img = cv2.warpAffine(dst_img, affine, (w, h))
+                
                 cv2.imshow('ImageWindow', dst_img)
+
+
+                #cv2.imshow('ImageWindow', dst_img)
             
                 k = cv2.waitKey(1) & 0xFF
  
@@ -196,12 +234,13 @@ class App():
                     break
 
  
-##画像スケール管理
+    ##画像スケール管理
     def scale_box(self, img, width, height):
         self.img_scale = max(width / img.shape[1], height / img.shape[0])
         return cv2.resize(img, dsize=None, fx=self.img_scale, fy=self.img_scale)
+
  
-##ラベル更新、描画メソッド
+    ##ラベル更新、描画メソッド
     def label_update(self, label_data):
  
         for i in range(len(label_data)):
@@ -237,31 +276,63 @@ class App():
                 cv2.fillConvexPoly(self.label_img, pts, color)
  
 
-##描画モード管理
-    def draw_label(self, event, x, y, flags, param):
-        x = int((1 / self.img_scale) * x)
-        y = int((1 / self.img_scale) * y)
+##マウスイベント管理
+    def mouse_event(self, event, x, y, flags, param):
+        #print(self.img_scale)
+        #x = int((1 / self.img_scale) * x)
+        #y = int((1 / self.img_scale) * y)
+
+        if not flags & cv2.EVENT_FLAG_SHIFTKEY:
+            x = int((1/self.shift) * x - self.cur_sx + (self.img_window[0]-(self.img_window[0]/self.shift)) / 2)
+            y = int((1/self.shift) * y - self.cur_sy + (self.img_window[1]-(self.img_window[1]/self.shift)) / 2)
+
+            if self.draw_mode == "PolyLine":
+                self.draw_polyline(event, x, y, flags, param)
+
+            elif self.draw_mode == "Ellipse":
+                self.draw_ellipse(event, x, y, flags, param)
+
+            elif self.draw_mode == "Rectangle":
+                self.draw_rectangle(event, x, y, flags, param)
+ 
+            elif self.draw_mode == "Polygon":
+                self.draw_polygon(event, x, y, flags, param)
+
+            if event == cv2.EVENT_RBUTTONDOWN:
+                if self.drawing_flag == False:
+                    del self.label_data[-1]
+
+            elif event == cv2.EVENT_LBUTTONUP:
+                self.drawing_flag = False
         
-        if self.draw_mode == "PolyLine":
-            self.draw_polyline(event, x, y, flags, param)
+        else:
+            if event == cv2.EVENT_MOUSEWHEEL:
+                if flags > 0:
+                    self.shift += 0.1
 
-        elif self.draw_mode == "Ellipse":
-            self.draw_ellipse(event, x, y, flags, param)
+                else:
+                    self.shift -= 0.1
+                    if self.shift <= 0:
+                        self.shift = 0
+                
+            elif event == cv2.EVENT_LBUTTONDOWN:
+                self.moving_flag = True
+                self.org_sx, self.org_sy = x, y
 
-        elif self.draw_mode == "Rectangle":
-            self.draw_rectangle(event, x, y, flags, param)
- 
-        elif self.draw_mode == "Polygon":
-            self.draw_polygon(event, x, y, flags, param)
+            elif event == cv2.EVENT_MOUSEMOVE:
+                if self.moving_flag:
+                    self.delta_sx = x - self.org_sx
+                    self.delta_sy = y - self.org_sy
+                    
+            elif event == cv2.EVENT_LBUTTONUP:
+                self.moving_flag = False
+                self.cur_sx  += self.delta_sx
+                self.cur_sy += self.delta_sy
+            
+                self.delta_sx, self.delta_sy = 0, 0
 
-        if event == cv2.EVENT_RBUTTONDOWN:
-            if self.drawing_flag == False:
-                del self.label_data[-1]
 
-        elif event == cv2.EVENT_LBUTTONUP:
-            self.drawing_flag = False
-         
- 
+
 ##個別描画処理
     ##Polylineマウスイベント
     def draw_polyline(self, event, x, y, flags, param):
@@ -330,7 +401,10 @@ class App():
                 self.pts.append([x, y])
                 self.label_data[-1]["points"] = self.pts
   
- 
+
+
+
+
 App()
  
 
