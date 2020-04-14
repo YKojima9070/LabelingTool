@@ -31,7 +31,7 @@ class App():
         self.img_loop_trg = True
         self.label_loop_trg = True
         self.img_scale = 0
-        self.img_window = [1280, 960]
+        self.img_window = [640, 480]
 
         ###0413追加
         self.shift = 1
@@ -95,7 +95,7 @@ class App():
             ]
  
 
-        window = sg.Window('Labelling Tool',layout, size=(200,1000), location=(1200,50))
+        window = sg.Window('Labelling Tool',layout, size=(200,1000), location=(1300,0))
  
         threading.Thread(target=self.img_cap, args=[img_list]).start()
  
@@ -158,8 +158,10 @@ class App():
                 except:
                     print('保存先が指定されていません。')
                     
+
                     
             if event == 'Exit':
+                self.label_loop_trg = False
                 self.img_loop_trg = False
                 break
             
@@ -170,7 +172,7 @@ class App():
     ###メイン描画プロセス###
     def img_cap(self, img_list):
         i = 0
- 
+
         cv2.namedWindow('ImageWindow')
  
         while self.img_loop_trg:
@@ -179,7 +181,6 @@ class App():
 
             img_array = np.fromfile(img_list[i], dtype=np.uint8)
             org_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
-            img = self.scale_box(org_img, self.img_window[0], self.img_window[1])
             
             self.org_img_size = org_img.shape
  
@@ -197,19 +198,19 @@ class App():
                 sta_time = time.perf_counter()
 
                 self.label_img = blank_img.copy()
-
                 self.label_update(self.label_data)
 
-                self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
+                #dst_img = cv2.addWeighted(org_img, 1, self.label_img, self.trans / 100, 0)
 
-                dst_img = cv2.addWeighted(img, 1, self.label_img, self.trans / 100, 0)
-                
+                dst_img = cv2.bitwise_or(org_img, self.label_img)
+
                 dst_img = self.affine_img(dst_img)
-                
+
+                dst_img = self.scale_box(dst_img, self.img_window[1], self.img_window[0])
+
                 end_time = time.perf_counter()
 
-                #print(end_time-sta_time)
-
+                print(end_time-sta_time)
 
                 cv2.imshow('ImageWindow', dst_img)
             
@@ -252,8 +253,8 @@ class App():
                 color.reverse()
 
             except:
-                color = 000000
                 print('クラスが選択されていません')
+                continue
 
 
             if label['type'] == "PolyLine":
@@ -282,26 +283,26 @@ class App():
         ###シフト処理###
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
-
-        dest[:,0] += (self.cur_sx + self.delta_sx) * self.img_scale
-        dest[:,1] += (self.cur_sy + self.delta_sy) * self.img_scale
+        dest[:,0] += self.cur_sx + self.delta_sx #* self.img_scale
+        dest[:,1] += self.cur_sy + self.delta_sy #* self.img_scale
         affine = cv2.getAffineTransform(src, dest)                
-        dst_img = cv2.warpAffine(img, affine, (self.img_window[0], self.img_window[1]))
+        dst_img = cv2.warpAffine(img, affine, (self.org_img_size[1], self.org_img_size[0]))
+
 
         ###ズーム処理###
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
 
-        dest[:,0] += - (self.org_img_size[0] / 2) * self.img_scale
-        dest[:,1] += - (self.org_img_size[1] / 2) * self.img_scale
+        dest[:,0] += - (self.org_img_size[0] / 2) #* self.img_scale
+        dest[:,1] += - (self.org_img_size[1] / 2) #* self.img_scale
 
         dest = dest * self.shift
 
-        dest[:,0] += (self.org_img_size[0] / 2) * self.img_scale
-        dest[:,1] += (self.org_img_size[1] / 2) * self.img_scale
+        dest[:,0] += (self.org_img_size[0] / 2) #* self.img_scale
+        dest[:,1] += (self.org_img_size[1] / 2) #* self.img_scale
 
         affine = cv2.getAffineTransform(src, dest)                
-        dst_img = cv2.warpAffine(dst_img, affine, (self.img_window[0], self.img_window[1]))
+        dst_img = cv2.warpAffine(dst_img, affine, (self.org_img_size[1], self.org_img_size[0]))
  
         return dst_img
 
