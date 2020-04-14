@@ -1,19 +1,18 @@
 import PySimpleGUI as sg
 import threading
 import cv2
-import io
 import glob
 import os
 import time
-import datetime
 import numpy as np
 import json
+import copy
 
-##test##
 
 class App():
                 
     def __init__(self):
+
         self.drawing_flag = False
         self.ix, self.iy = -1, -1
         self.label_img = []
@@ -21,12 +20,14 @@ class App():
         self.pts = []
         self.class_color_dict = {}
         self.draw_mode = ''
+
         self.cur_class = ''
         self.cur_img = []
-        self.class_color = 'white'
+        self.class_color = 'red'
         self.make_class = 5
         self.stroke_width = 10
         self.trans = 50
+
         self.img_loop_trg = True
         self.label_loop_trg = True
         self.img_scale = 0
@@ -64,15 +65,13 @@ class App():
 
         ##GUIレイアウト
         class_layout = [
-            [sg.Radio('', 'class', pad=(0,0), key='class{}'.format(str(i)), default = True),
+            [sg.Radio('', 'class', pad=(0,0), key='class{}'.format(str(i)), default = False),
              sg.In('class{}'.format(str(i)),size=(15,5),pad=(0,0), key='class_name{}'.format(str(i))),
              sg.ColorChooserButton('', size=(5, 1),
                                    key='class{}_color'.format(str(i)),
                                    button_color=(self.class_color,self.class_color))] for i in range(self.make_class)]
 
-
         layout = [
-            [sg.Text('Label Tool', size=(15, 1), font='Helvetica 14')],
             [sg.Text('StrokeWidth', size=(15, 1), font='Helvetica 14', key='StrokeWidth')],
             [sg.Slider(range=(0,300), default_value=30, resolution=1, size=(20, 20), orientation='horizontal', key='strokewidth')],
 
@@ -95,7 +94,7 @@ class App():
             ]
  
 
-        window = sg.Window('Demo Application - Labelling Tool',layout, size=(200,1000), location=(1200,50))
+        window = sg.Window('Labelling Tool',layout, size=(200,1000), location=(1200,50))
  
         threading.Thread(target=self.img_cap, args=[img_list]).start()
  
@@ -138,11 +137,27 @@ class App():
                 self.draw_mode = 'Polygon'
  
             elif event == 'SaveLabel':
-                dt = datetime.datetime.now()
-                save_file = '{0}\\{1:%Y%m%d-%H%M%S}.json'.format(os.getcwd(), dt) 
-                with open(save_file, 'w') as f:
-                    json.dump(self.label_dict, f, ensure_ascii=False)
+                save_label_dict = copy.deepcopy(self.label_dict) ##辞書はミュータブルなのでコピー時注意
+
+                for i in range(len(save_label_dict['data'])):
+                    for n in range(len(save_label_dict['data'][i]['regionLabel'])):
+                        _nv = save_label_dict['data'][i]['regionLabel'][n]
+                        if _nv['type'] == 'Rect':
+                            _nv['width'] = _nv['width'] - _nv['x'] 
+                            _nv['height'] = _nv['height'] - _nv['y'] 
+                
+                try:
+                    save_file = sg.popup_get_file('ラベル保存',
+                                                 file_types=(('JSONファイル', '*.json'),), 
+                                                 save_as = True)+'{}'.format('.json')
+
+                    with open(save_file, 'w') as f:
+                        json.dump(save_label_dict, f, ensure_ascii=False)
  
+                except:
+                    print('保存先が指定されていません。')
+                    
+                    
             if event == 'Exit':
                 self.img_loop_trg = False
                 break
@@ -155,19 +170,17 @@ class App():
     def img_cap(self, img_list):
         i = 0
  
-        #cv2.namedWindow('ImageWindow',cv2.WINDOW_KEEPRATIO | cv2.WINDOW_NORMAL)
-        #cv2.namedWindow('ImageWindow',cv2.WINDOW_NORMAL)
-
         cv2.namedWindow('ImageWindow')
  
         while self.img_loop_trg:
+
             self.label_data = []
-            S
+
             img_array = np.fromfile(img_list[i], dtype=np.uint8)
-            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
-            img = self.scale_box(img, self.img_window[0], self.img_window[1])
+            org_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
+            img = self.scale_box(org_img, self.img_window[0], self.img_window[1])
             
-            get_img_size = img.shape
+            get_img_size = org_img.shape
  
             for num_data in range(len(self.label_dict['data'])):
                 if self.label_dict['data'][num_data]['fileName'] == os.path.basename(img_list[i]):
@@ -177,22 +190,22 @@ class App():
             
             blank_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
 
-
             ###描画プロセス###
             while self.label_loop_trg: 
-                #sta_time = time.perf_counter()
+
+                sta_time = time.perf_counter()
 
                 self.label_img = blank_img.copy()
 
                 self.label_update(self.label_data)
 
-                #self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
+                self.label_img = self.scale_box(self.label_img, self.img_window[0], self.img_window[1])
 
                 dst_img = cv2.addWeighted(img, 1, self.label_img, self.trans / 100, 0)
                 
                 dst_img = self.affine_img(dst_img)
                 
-                #end_time = time.perf_counter()
+                end_time = time.perf_counter()
 
                 #print(end_time-sta_time)
 
@@ -212,8 +225,9 @@ class App():
                     i -= 1
                     if i < -len(img_list)+1:
                         i = 0
-
                     break
+        
+        cv2.destroyAllWindows()
 
  
     ##画像スケール管理
@@ -228,14 +242,17 @@ class App():
         for i in range(len(label_data)):
 
             self.num_img = i
- 
             label = label_data[self.num_img]
 
-            value = self.class_color_dict[label["className"]].lstrip('#')
+            try:
+                value = self.class_color_dict[label["className"]].lstrip('#')
+                lv = len(value)
+                color =  [int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3)]
+                color.reverse()
 
-            lv = len(value)
-            color =  [int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3)]
-            color.reverse()
+            except:
+                print('クラスが選択されていません')
+
 
             if label['type'] == "PolyLine":
                 pts = np.array(label["points"], dtype=np.int32)
@@ -264,8 +281,8 @@ class App():
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
 
-        dest[:,0] += (self.cur_sx + self.delta_sx) * 1
-        dest[:,1] += (self.cur_sy + self.delta_sy) * 1
+        dest[:,0] += self.cur_sx + self.delta_sx
+        dest[:,1] += self.cur_sy + self.delta_sy
         affine = cv2.getAffineTransform(src, dest)                
         dst_img = cv2.warpAffine(img, affine, (self.img_window[0], self.img_window[1]))
 
@@ -289,8 +306,8 @@ class App():
 
 ##マウスイベント管理
     def mouse_event(self, event, x, y, flags, param):
-        #x = int((1 / self.img_scale) * x)
-        #y = int((1 / self.img_scale) * y)
+        x = int((1 / self.img_scale) * x)
+        y = int((1 / self.img_scale) * y)
 
         if not flags & cv2.EVENT_FLAG_SHIFTKEY:
             x = int((1/self.shift) * x - self.cur_sx + (self.img_window[0]-(self.img_window[0]/self.shift)) / 2)
@@ -375,8 +392,8 @@ class App():
              
         elif event == cv2.EVENT_MOUSEMOVE:
             if self.drawing_flag == True:
-                self.label_data[-1]["radiusX"] = abs(x - self.ix)
-                self.label_data[-1]["radiusY"] = abs(y - self.iy)
+                self.label_data[-1]["radiusX"] = abs(self.ix - x)
+                self.label_data[-1]["radiusY"] = abs(self.iy - y)
 
     ##Rectangleマウスイベント                 
     def draw_rectangle(self, event, x, y, flags, param):
@@ -394,7 +411,8 @@ class App():
             if self.drawing_flag == True:
                 self.label_data[-1]["width"] = x
                 self.label_data[-1]["height"] = y            
- 
+
+
     ##Polygonマウスイベント                  
     def draw_polygon(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
