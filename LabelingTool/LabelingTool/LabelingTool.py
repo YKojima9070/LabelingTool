@@ -40,6 +40,7 @@ class App():
         self.cur_sx, self.cur_sy = -1, -1
         self.moving_flag = False
         self.dst_img = []
+        self.org_img_size = []
 
         self.label_dict = {"name":"TEST","time":"2020-03-25T09:37:28.746Z","version":"1.1.3",
                            "data":[]}
@@ -180,7 +181,7 @@ class App():
             org_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
             img = self.scale_box(org_img, self.img_window[0], self.img_window[1])
             
-            get_img_size = org_img.shape
+            self.org_img_size = org_img.shape
  
             for num_data in range(len(self.label_dict['data'])):
                 if self.label_dict['data'][num_data]['fileName'] == os.path.basename(img_list[i]):
@@ -188,7 +189,7 @@ class App():
  
             cv2.setMouseCallback('ImageWindow', self.mouse_event)
             
-            blank_img = np.zeros((get_img_size[0], get_img_size[1] ,3)).astype(np.uint8)
+            blank_img = np.zeros((self.org_img_size[0], self.org_img_size[1] ,3)).astype(np.uint8)
 
             ###描画プロセス###
             while self.label_loop_trg: 
@@ -251,6 +252,7 @@ class App():
                 color.reverse()
 
             except:
+                color = 000000
                 print('クラスが選択されていません')
 
 
@@ -281,8 +283,8 @@ class App():
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
 
-        dest[:,0] += self.cur_sx + self.delta_sx
-        dest[:,1] += self.cur_sy + self.delta_sy
+        dest[:,0] += (self.cur_sx + self.delta_sx) * self.img_scale
+        dest[:,1] += (self.cur_sy + self.delta_sy) * self.img_scale
         affine = cv2.getAffineTransform(src, dest)                
         dst_img = cv2.warpAffine(img, affine, (self.img_window[0], self.img_window[1]))
 
@@ -290,13 +292,13 @@ class App():
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
 
-        dest[:,0] += - (self.img_window[0] / 2)
-        dest[:,1] += - (self.img_window[1] / 2)
+        dest[:,0] += - (self.org_img_size[0] / 2) * self.img_scale
+        dest[:,1] += - (self.org_img_size[1] / 2) * self.img_scale
 
         dest = dest * self.shift
 
-        dest[:,0] += self.img_window[0] / 2
-        dest[:,1] += self.img_window[1] / 2
+        dest[:,0] += (self.org_img_size[0] / 2) * self.img_scale
+        dest[:,1] += (self.org_img_size[1] / 2) * self.img_scale
 
         affine = cv2.getAffineTransform(src, dest)                
         dst_img = cv2.warpAffine(dst_img, affine, (self.img_window[0], self.img_window[1]))
@@ -310,8 +312,8 @@ class App():
         y = int((1 / self.img_scale) * y)
 
         if not flags & cv2.EVENT_FLAG_SHIFTKEY:
-            x = int((1/self.shift) * x - self.cur_sx + (self.img_window[0]-(self.img_window[0]/self.shift)) / 2)
-            y = int((1/self.shift) * y - self.cur_sy + (self.img_window[1]-(self.img_window[1]/self.shift)) / 2)
+            x = int((1/self.shift) * x - self.cur_sx + (self.org_img_size[0]-(self.org_img_size[0]/self.shift)) / 2)
+            y = int((1/self.shift) * y - self.cur_sy + (self.org_img_size[1]-(self.org_img_size[1]/self.shift)) / 2)
 
             if self.draw_mode == "PolyLine":
                 self.draw_polyline(event, x, y, flags, param)
