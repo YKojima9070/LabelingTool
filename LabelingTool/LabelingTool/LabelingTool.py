@@ -138,7 +138,7 @@ class App():
                 self.draw_mode = 'Polygon'
  
             elif event == 'SaveLabel':
-                save_label_dict = copy.deepcopy(self.label_dict) ##辞書はミュータブルなのでコピー時注意
+                save_label_dict = copy.deepcopy(self.label_dict) ## Atten: dict is mutable data, do not use copy.copy() for image
 
                 for i in range(len(save_label_dict['data'])):
                     for n in range(len(save_label_dict['data'][i]['regionLabel'])):
@@ -157,9 +157,7 @@ class App():
  
                 except:
                     print('保存先が指定されていません。')
-                    
-
-                    
+                                       
             if event == 'Exit':
                 self.label_loop_trg = False
                 self.img_loop_trg = False
@@ -168,8 +166,9 @@ class App():
         window.close()            
 
 
-###以下モジュール#### 
-    ###メイン描画プロセス###
+### Module ####
+ 
+    ### -MainProcess- ###
     def img_cap(self, img_list):
         i = 0
 
@@ -181,6 +180,7 @@ class App():
 
             img_array = np.fromfile(img_list[i], dtype=np.uint8)
             org_img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)            
+            org_img = cv2.cvtColor(org_img, cv2.COLOR_BGR2BGRA)
             
             self.org_img_size = org_img.shape
  
@@ -190,22 +190,39 @@ class App():
  
             cv2.setMouseCallback('ImageWindow', self.mouse_event)
             
-            blank_img = np.zeros((self.org_img_size[0], self.org_img_size[1] ,3)).astype(np.uint8)
+            blank_img = np.zeros((self.org_img_size[0], self.org_img_size[1] ,4)).astype(np.uint8)
+            
 
-            ###描画プロセス###
+            ## Showing process
             while self.label_loop_trg: 
 
                 sta_time = time.perf_counter()
 
+                # Make blank data for label_data
                 self.label_img = blank_img.copy()
+                # Update label_data to blank data 
                 self.label_update(self.label_data)
 
-                #dst_img = cv2.addWeighted(org_img, 1, self.label_img, self.trans / 100, 0)
 
-                dst_img = cv2.bitwise_or(org_img, self.label_img)
 
+                # Marge image and label
+                
+                alpha = 0.5
+
+                self.label_img = cv2.addWeighted(org_img, alpha, self.label_img, 1 - alpha, 0)
+
+                dst_img = self.img_overlay(org_img, alpha)
+
+
+                #######
+
+
+
+                #print(dst_img.shape)
+                # Zoom shift process
                 dst_img = self.affine_img(dst_img)
 
+                # Resize image 
                 dst_img = self.scale_box(dst_img, self.img_window[1], self.img_window[0])
 
                 end_time = time.perf_counter()
@@ -232,13 +249,13 @@ class App():
         cv2.destroyAllWindows()
 
  
-    ##画像スケール管理
+    ## Reseize Image process
     def scale_box(self, img, width, height):
         self.img_scale = max(width / img.shape[1], height / img.shape[0])
         return cv2.resize(img, dsize=None, fx=self.img_scale, fy=self.img_scale)
 
  
-    ##ラベル更新、描画メソッド
+    ## Updating each label data
     def label_update(self, label_data):
 
         for i in range(len(label_data)):
@@ -278,18 +295,34 @@ class App():
                 pts = np.array(label["points"], dtype=np.int32)
                 cv2.fillConvexPoly(self.label_img, pts, color)
 
+    
+    ## Make marged image data
+    def img_overlay(self, org_img, alpha):
+
+        
+        label_img_gray = cv2.cvtColor(self.label_img, cv2.COLOR_BGR2GRAY)
+        _, mask = cv2.threshold(label_img_gray, 255 * alpha + 10, 255, cv2.THRESH_BINARY)
+
+        mask_inv = cv2.bitwise_not(mask)
+        org_img_bg = cv2.bitwise_and(org_img, org_img, mask=mask_inv)
+        label_img_fg = cv2.bitwise_and(self.label_img, self.label_img, mask = mask)
+
+        return cv2.add(org_img_bg, label_img_fg)
+
+                
+    ## Affine, shift, zoom
     def affine_img(self, img):
         
-        ###シフト処理###
+        ## Shift Image
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
-        dest[:,0] += self.cur_sx + self.delta_sx #* self.img_scale
-        dest[:,1] += self.cur_sy + self.delta_sy #* self.img_scale
+        dest[:,0] += self.cur_sx + self.delta_sx 
+        dest[:,1] += self.cur_sy + self.delta_sy
         affine = cv2.getAffineTransform(src, dest)                
         dst_img = cv2.warpAffine(img, affine, (self.org_img_size[1], self.org_img_size[0]))
 
 
-        ###ズーム処理###
+        ## Zoom Image
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
 
