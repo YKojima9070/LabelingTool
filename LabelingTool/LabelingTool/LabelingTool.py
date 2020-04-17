@@ -12,7 +12,6 @@ import copy
 class App():
                 
     def __init__(self):
-
         self.drawing_flag = False
         self.ix, self.iy = -1, -1
         self.label_img = []
@@ -23,7 +22,9 @@ class App():
 
         self.cur_class = ''
         self.cur_img = []
-        self.class_color = 'red'
+        self.class_color = '#FF0000'
+        
+        
         self.make_class = 5
         self.stroke_width = 10
         self.trans = 50
@@ -33,7 +34,6 @@ class App():
         self.img_scale = 0
         self.img_window = [640, 480]
 
-        ###0413追加
         self.shift = 1
         self.delta_sx, self.delta_sy = -1, -1
         self.org_sx, self.org_sy = -1, -1
@@ -41,6 +41,7 @@ class App():
         self.moving_flag = False
         self.dst_img = []
         self.org_img_size = []
+
 
         self.label_dict = {"name":"TEST","time":"2020-03-25T09:37:28.746Z","version":"1.1.3",
                            "data":[]}
@@ -95,7 +96,7 @@ class App():
             ]
  
 
-        window = sg.Window('Labelling Tool',layout, size=(200,1000), location=(1300,0))
+        window = sg.Window('Labelling Tool',layout, size=(200,1000), location=(0,0))
  
         threading.Thread(target=self.img_cap, args=[img_list]).start()
  
@@ -120,7 +121,7 @@ class App():
                         self.class_color_dict['class{}'.format(str(i))] = values[_color]
 
                     else:
-                        self.class_color_dict['class{}'.format(str(i))] = '#FFFFFF'
+                        self.class_color_dict['class{}'.format(str(i))] = self.class_color
 
                     if values['class{}'.format(str(i))]:
                         self.cur_class = 'class{}'.format(str(i))
@@ -138,26 +139,8 @@ class App():
                 self.draw_mode = 'Polygon'
  
             elif event == 'SaveLabel':
-                save_label_dict = copy.deepcopy(self.label_dict) ## Atten: dict is mutable data, do not use copy.copy() for image
+                self.save_process(values)
 
-                for i in range(len(save_label_dict['data'])):
-                    for n in range(len(save_label_dict['data'][i]['regionLabel'])):
-                        _nv = save_label_dict['data'][i]['regionLabel'][n]
-                        if _nv['type'] == 'Rect':
-                            _nv['width'] = _nv['width'] - _nv['x'] 
-                            _nv['height'] = _nv['height'] - _nv['y'] 
-                
-                try:
-                    save_file = sg.popup_get_file('ラベル保存',
-                                                 file_types=(('JSONファイル', '*.json'),), 
-                                                 save_as = True)+'{}'.format('.json')
-
-                    with open(save_file, 'w') as f:
-                        json.dump(save_label_dict, f, ensure_ascii=False)
- 
-                except:
-                    print('保存先が指定されていません。')
-                                       
             if event == 'Exit':
                 self.label_loop_trg = False
                 self.img_loop_trg = False
@@ -200,34 +183,23 @@ class App():
 
                 # Make blank data for label_data
                 self.label_img = blank_img.copy()
+
                 # Update label_data to blank data 
                 self.label_update(self.label_data)
 
-
-
                 # Marge image and label
-                
-                alpha = 0.5
+                dst_img = self.img_overlay(org_img)
 
-                self.label_img = cv2.addWeighted(org_img, alpha, self.label_img, 1 - alpha, 0)
-
-                dst_img = self.img_overlay(org_img, alpha)
-
-
-                #######
-
-
-
-                #print(dst_img.shape)
                 # Zoom shift process
                 dst_img = self.affine_img(dst_img)
+             
+
+                end_time = time.perf_counter()
 
                 # Resize image 
                 dst_img = self.scale_box(dst_img, self.img_window[1], self.img_window[0])
 
-                end_time = time.perf_counter()
-
-                print(end_time-sta_time)
+                #print(end_time-sta_time)
 
                 cv2.imshow('ImageWindow', dst_img)
             
@@ -296,12 +268,15 @@ class App():
                 cv2.fillConvexPoly(self.label_img, pts, color)
 
     
-    ## Make marged image data
-    def img_overlay(self, org_img, alpha):
+    ## Make marged image
+    def img_overlay(self, org_img):
 
-        
+        alpha = self.trans / 100
+
+        self.label_img = cv2.addWeighted(org_img, alpha, self.label_img, 1 - alpha, 0)
+
         label_img_gray = cv2.cvtColor(self.label_img, cv2.COLOR_BGR2GRAY)
-        _, mask = cv2.threshold(label_img_gray, 255 * alpha + 10, 255, cv2.THRESH_BINARY)
+        _, mask = cv2.threshold(label_img_gray, 255 * alpha + 5, 255, cv2.THRESH_BINARY)
 
         mask_inv = cv2.bitwise_not(mask)
         org_img_bg = cv2.bitwise_and(org_img, org_img, mask=mask_inv)
@@ -318,7 +293,8 @@ class App():
         dest = src.copy()
         dest[:,0] += self.cur_sx + self.delta_sx 
         dest[:,1] += self.cur_sy + self.delta_sy
-        affine = cv2.getAffineTransform(src, dest)                
+        affine = cv2.getAffineTransform(src, dest)
+        
         dst_img = cv2.warpAffine(img, affine, (self.org_img_size[1], self.org_img_size[0]))
 
 
@@ -326,13 +302,13 @@ class App():
         src = np.array([[0.0, 0.0],[0.0, 1.0],[1.0, 0.0]], np.float32)
         dest = src.copy()
 
-        dest[:,0] += - (self.org_img_size[0] / 2) #* self.img_scale
-        dest[:,1] += - (self.org_img_size[1] / 2) #* self.img_scale
+        dest[:,0] += - (self.org_img_size[0] / 2)
+        dest[:,1] += - (self.org_img_size[1] / 2)
 
         dest = dest * self.shift
 
-        dest[:,0] += (self.org_img_size[0] / 2) #* self.img_scale
-        dest[:,1] += (self.org_img_size[1] / 2) #* self.img_scale
+        dest[:,0] += (self.org_img_size[0] / 2)
+        dest[:,1] += (self.org_img_size[1] / 2)
 
         affine = cv2.getAffineTransform(src, dest)                
         dst_img = cv2.warpAffine(dst_img, affine, (self.org_img_size[1], self.org_img_size[0]))
@@ -375,8 +351,8 @@ class App():
 
                 else:
                     self.shift -= 0.1
-                    if self.shift <= 0:
-                        self.shift = 0
+                    if self.shift <= 1:
+                        self.shift = 1
                 
             elif event == cv2.EVENT_LBUTTONDOWN:
                 self.moving_flag = True
@@ -393,8 +369,7 @@ class App():
                 self.cur_sy += self.delta_sy
             
                 self.delta_sx, self.delta_sy = 0, 0
-
-
+        
 
 ##個別描画処理
     ##Polylineマウスイベント
@@ -465,6 +440,37 @@ class App():
                 self.pts.append([x, y])
                 self.label_data[-1]["points"] = self.pts
   
+    def save_process(self, values):
+        _class_name_update = {}
+        for i in range(self.make_class):
+            _class_name_update['class{}'.format(i)] = values['class_name{}'.format(i)]
+
+            save_label_dict = copy.deepcopy(self.label_dict) ## Atten: dict is mutable data, do not use copy.copy() for image
+
+        _sd = save_label_dict['data']
+
+        for i in range(len(_sd)):
+            for n in range(len(_sd[i]['regionLabel'])):
+                _nv = _sd[i]['regionLabel'][n]
+   
+                _nv['className'] = _class_name_update[_nv['className']]  
+
+                if _nv['type'] == 'Rect':
+                    _nv['width'] = _nv['width'] - _nv['x'] 
+                    _nv['height'] = _nv['height'] - _nv['y'] 
+
+                 
+        try:
+            save_file = sg.popup_get_file('ラベル保存',
+                                         file_types=(('JSONファイル', '*.json'),), 
+                                         save_as = True)+'{}'.format('.json')
+
+            with open(save_file, 'w') as f:
+                json.dump(save_label_dict, f, ensure_ascii=False)
+ 
+        except:
+            print('保存先が指定されていません。')
+                           
 
 App()
  
